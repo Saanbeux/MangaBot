@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import json
 
 
-#TODO: Check last chapter from same thread, ADD role subscription with emote, ADD Role creation if doesnt exist, FUTURE: Add thread creation if it doesnt exist.
+#Check last chapter from same thread, ADD role subscription with emote, ADD Role creation if doesnt exist, FUTURE: Add thread creation if it doesnt exist.
 
 # Set up some variables
 TOKEN = "MTA5Mzk4NTY4NTI4MDY2NTY3MA.GH59CR.3aAxLotJbeX1JnYRXFGZfQLLuHsAyUI668DJTc"  # Replace with your Discord bot token
