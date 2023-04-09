@@ -5,17 +5,22 @@ import asyncio
 from bs4 import BeautifulSoup
 import json
 
+# This allows a discord bot to identify a manga and channel,
+# scans the One Piece TCBScans site for new manga updates,
+# and posts those updates to the appropriate channels
+# (if they exist as a thread under a message mentioning "Manga Title").
+# Also creates a role named after the manga, and updates everyone who was
+# "subscribed" to the manga by reacting to the message with a white checkmark
 
-#Check last chapter from same thread, ADD role subscription with emote, ADD Role creation if doesnt exist, FUTURE: Add thread creation if it doesnt exist.
+#TOD: Create thread if not found.
 
-# Set up some variables
-TOKEN = "MTA5Mzk4NTY4NTI4MDY2NTY3MA.GH59CR.3aAxLotJbeX1JnYRXFGZfQLLuHsAyUI668DJTc"  # Replace with your Discord bot token
-MANGA_LIST_FILE = "manga_list.json"
-MANGA_FEED_URL = "http://fetchrss.com/rss/643070db070000260a486653643073064801940d4f7ac6d3.xml"  # Replace with the URL of the manga RSS feed you want to monitor
-CHANNEL_ID = 1093972838022647918
-MANGA_LIST = {}  # Replace with the name of the manga you want to filter for
-UPDATE_INTERVAL = 21600  # Replace with the desired interval in seconds between each check for new releases
-SERVER_ID = 201172229793382400
+TOKEN = ""
+MANGA_FEED_URL = ""
+CHANNEL_ID = 0
+UPDATE_INTERVAL = 0
+SERVER_ID = 0
+
+SETTINGS={}
 
 # Create a new Discord client instance with the necessary intents
 intents = discord.Intents.default()
@@ -35,7 +40,7 @@ def extract_manga_info(release):
         #get chapter. Default to 0 if it cant be found
         chapter_number = int(match.group(2)) if match.group(2) else 0
 
-        # Get the subtitle (from feed summary). I dont know how this works but I trust
+        # Get the subtitle from feed summary
         soup = BeautifulSoup(release.summary, "html.parser")
         #remove ugly FetchRSS watermark
         pattern = re.compile(r'\s*\(Feed generated with FetchRSS\)\s*')
@@ -47,102 +52,129 @@ def extract_manga_info(release):
 
 
 # Define an async function that checks for new manga releases and posts updates to the designated thread
-async def check_manga(server):
+async def check_manga(server, manga_list):
     # Initialize the latest chapter to 0
-    print(f"Checking for new manga, updating list")
+    print(f"Posting new mangas")
+    # Parse the manga RSS feed using feedparser,
+    feed = feedparser.parse(MANGA_FEED_URL)
+    for entry in feed.entries:
+        #LIST INDEXES: 0 Name, 1 chapter, 2 subtitle, 3 link
+        manga_attributes = extract_manga_info(entry)
+        try:
+            # If the latest release has a higher chapter number than the latest chapter we've posted about, it's a new release.
+            # Maybe persisting to disk in future
+            # If the manga isnt on the list, ignore.
+            if manga_list[manga_attributes[0]] < manga_attributes[1]:
+                # update latest chapter
+                manga_list[manga_attributes[0]] = manga_attributes[1]
+                # Send a message to the thread with the latest release info and summary
+                thread = discord.utils.get(server.threads, name=manga_attributes[0])  # Find thread corresponding to Manga Name
+                role = discord.utils.get(server.roles, name=manga_attributes[0])  # Find role corresponding to Manga Role
+                # Alert role and post link to thread
+                message = f"New {role.mention} Chapter {manga_attributes[1]}: {manga_attributes[2]}\n{manga_attributes[3]}"
+                print(f"    New update: {manga_attributes[0]} - {manga_attributes[1]}")
+                await thread.send(content=message)
+        except:
+            print(f"    Dont care about: {manga_attributes[0]}")
 
-    #load mangas
-    try:
-        with open(MANGA_LIST_FILE, 'r') as f:
-            MANGA_LIST = json.load(f)
-    except:
-        print(f"File not found")
-
-    while True:
-        # Parse the manga RSS feed using feedparser,
-        feed = feedparser.parse(MANGA_FEED_URL)
-
-        for entry in feed.entries:
-            #LIST INDEXES: 0 Name, 1 chapter, 2 subtitle, 3 link
-            manga_attributes = extract_manga_info(entry)
-            try:
-                # If the latest release has a higher chapter number than the latest chapter we've posted about, it's a new release.
-                # Maybe persisting to disk in future
-                # If the manga isnt on the list, ignore.
-                if MANGA_LIST[manga_attributes[0]] < manga_attributes[1]:
-                    # update latest chapter
-                    MANGA_LIST[manga_attributes[0]] = manga_attributes[1]
-                    # Send a message to the thread with the latest release info and summary
-                    thread = discord.utils.get(server.threads, name=manga_attributes[0])  # Find thread corresponding to Manga Name
-                    role = discord.utils.get(server.roles, name=manga_attributes[0])  # Find role corresponding to Manga Role
-
-                    # Alert role and post link to thread
-                    message = f"New {role.mention} Chapter {manga_attributes[1]}: {manga_attributes[2]}\n{manga_attributes[3]}"
-                    print(f" New update: {manga_attributes[0]} - {manga_attributes[1]}")
-                    await thread.send(content=message)
-                    with open('manga_list.json', 'w') as f:
-                        json.dump(MANGA_LIST, f)
-            except:
-                print(f"Dont care about: {manga_attributes[0]}")
-
-        # Wait before checking for new releases again
-        await asyncio.sleep(UPDATE_INTERVAL)
-
-async def check_reactions(server,channel):
-
+"""
+@:param server: The discord guild
+@:param channel: The guild's manga channel 
+Checks for all messages in the channel's history. 
+Associates messages to manga titles and roles.
+Removes everyone from manga role and re-adds them if they are still subscribed (removes members who are no longer subscribed)
+Adds manga to chapter json if it does not exist.
+Creates a role per manga channel if it does not exist.
+"""
+async def update(guild, channel, manga_list):
     async with discord.Client(intents=discord.Intents.default()) as client:
-
-        # Create a dictionary of roles and their corresponding messages
-        role_messages = {}
+        #Check all messages for reaction and role
         async for message in channel.history(limit=None):
-            #Add a react to each message for people to hop on
             await message.add_reaction("✅")
-            if message.author.bot:
-                continue
-
-            # Extract the role name from the message content
-            role_name = message.content.split(":")[0].strip()
-
-            # If the role doesn't exist, create it
-            role = discord.utils.get(server.roles, name=role_name)
-            if role is None:
-                role = await server.create_role(name=role_name)
-
-            # Add the message to the dictionary of role messages
-            role_messages[role] = message
-
-            # Check if any users have reacted with a :white_check_mark: emoji
-            for reaction in message.reactions:
-                if str(reaction.emoji) == "✅":
-                    users = reaction.users()
-                    #Remove all old members
-                    for member in role.members:
-                        print(f"Removing from role {role.name}: {member}")
-                        await member.remove_roles(role)
-
-                    #Readd all members
-                    async for user in users:
-                        if user.bot:
-                            continue
-                        if role not in user.roles:
-                            print(f"Adding user to {role.name}: {user}")
-                            await user.add_roles(role)
-
+            role = await update_list_and_roles(message, guild, manga_list)
+            await update_members(message,role)
     await client.close()
+
+async def update_list_and_roles(message, guild, manga_list):
+    print(f"Updating lists...")
+    # If the role doesn't exist, create it
+    role = discord.utils.get(guild.roles, name=message.content)
+    if role is None:
+        role = await guild.create_role(name=role.name)
+    # Update tracked mangas and roles
+    try:
+        # Extract the manga role name from the message content
+        manga_list[role.name]  # check if it is in list
+    except:
+        # Add manga to JSON if not being tracked, but is on the channel
+        manga_list[message.content] = 0
+    return role
+
+async def update_members(message, role):
+    # Check if any users have reacted with a :white_check_mark: emoji
+    # gonna have to rework this shit
+    # update memberships
+    for reaction in message.reactions:
+        if str(reaction.emoji) == "✅":
+            users = reaction.users()
+            # Remove all old members
+            print(f"Resetting role: {role.name}")
+            for member in role.members:
+                print(f"    {member} removed.")
+                await member.remove_roles(role)
+
+            print(f"Restoring role: {role.name}")
+            # Re-add all members
+            async for user in users:
+                if user.bot:
+                    continue
+                if role not in user.roles:
+                    print(f"    {user} removed.")
+                    await user.add_roles(role)
 
 # Define an async event that runs when the bot is ready to start processing events
 @client.event
 async def on_ready():
-    print(f"Logged in as {client.user} (ID: {client.user.id})")
+    manga_list = {}
+
     server = client.get_guild(SERVER_ID)
     channel = server.get_channel(CHANNEL_ID)
 
-    # Check memberships
-    await check_reactions(server, channel)
+    #load mangas
+    try:
+        with open("manga_list.json", 'r') as f:
+            manga_list = json.load(f)
+    except:
+        print(f"Manga list not found")
+        exit(1)
 
-    # Start checking for new manga releases
-    await check_manga(server)
+    while True:
+        print(f"Begin checking!")
+        # Check memberships
+        await update(server, channel, manga_list)
 
+        # Start checking for new manga releases
+        await check_manga(server, manga_list)
+
+        # Flush updated list
+        with open('manga_list.json', 'w') as f:
+            json.dump(manga_list, f)
+
+        # Wait before checking for new releases again
+        print(f"Done checking, sleeping for {UPDATE_INTERVAL/60} minutes..")
+        await asyncio.sleep(UPDATE_INTERVAL)
 
 # Run the bot with the specified token
-client.run(TOKEN)
+
+# load mangas
+try:
+    with open("settings.json", 'r') as f:
+        SETTINGS = json.load(f)
+
+        CHANNEL_ID = SETTINGS["CHANNEL_ID"]
+        UPDATE_INTERVAL = SETTINGS["UPDATE_INTERVAL"]
+        SERVER_ID = SETTINGS["SERVER_ID"]
+        client.run(SETTINGS["TOKEN"])
+except:
+    print(f"Settings not found, Abort bot")
+    exit(1)
