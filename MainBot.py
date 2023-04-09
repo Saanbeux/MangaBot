@@ -56,7 +56,8 @@ async def check_manga(server, manga_list):
     # Initialize the latest chapter to 0
     print(f"Posting new mangas")
     # Parse the manga RSS feed using feedparser,
-    feed = feedparser.parse(MANGA_FEED_URL)
+    feed = feedparser.parse(SETTINGS["MANGA_FEED_URL"])
+    print(feed)
     for entry in feed.entries:
         #LIST INDEXES: 0 Name, 1 chapter, 2 subtitle, 3 link
         manga_attributes = extract_manga_info(entry)
@@ -74,6 +75,10 @@ async def check_manga(server, manga_list):
                 message = f"New {role.mention} Chapter {manga_attributes[1]}: {manga_attributes[2]}\n{manga_attributes[3]}"
                 print(f"    New update: {manga_attributes[0]} - {manga_attributes[1]}")
                 await thread.send(content=message)
+
+                # Flush updated list
+                with open('manga_list.json', 'w') as f:
+                    json.dump(manga_list, f)
         except:
             print(f"    Dont care about: {manga_attributes[0]}")
 
@@ -86,17 +91,16 @@ Removes everyone from manga role and re-adds them if they are still subscribed (
 Adds manga to chapter json if it does not exist.
 Creates a role per manga channel if it does not exist.
 """
-async def update(guild, channel, manga_list):
+async def update(guild, channel, manga_list, members_list):
     async with discord.Client(intents=discord.Intents.default()) as client:
         #Check all messages for reaction and role
         async for message in channel.history(limit=None):
             await message.add_reaction("✅")
-            role = await update_list_and_roles(message, guild, manga_list)
-            await update_members(message,role)
+            role = await update_mangas(message, guild, manga_list)
+            await update_members(message,role, guild, members_list)
     await client.close()
 
-async def update_list_and_roles(message, guild, manga_list):
-    print(f"Updating lists...")
+async def update_mangas(message, guild, manga_list):
     # If the role doesn't exist, create it
     role = discord.utils.get(guild.roles, name=message.content)
     if role is None:
@@ -110,32 +114,49 @@ async def update_list_and_roles(message, guild, manga_list):
         manga_list[message.content] = 0
     return role
 
-async def update_members(message, role):
+async def update_members(message, role, server, members_list):
     # Check if any users have reacted with a :white_check_mark: emoji
     # gonna have to rework this shit
     # update memberships
     for reaction in message.reactions:
         if str(reaction.emoji) == "✅":
-            users = reaction.users()
-            # Remove all old members
-            print(f"Resetting role: {role.name}")
-            for member in role.members:
-                print(f"    {member} removed.")
-                await member.remove_roles(role)
+            users=[]
+            async for user in reaction.users():
+                users.append(user.id)
+            manga_members = []
+            try:
+                #check for if manga is in list
+                manga_members = members_list[role.name]
+            except:
+                #create empty list if not found
+                members_list[role.name]=[]
 
-            print(f"Restoring role: {role.name}")
+            removed_members = list(set(manga_members) - set(users))
+            new_members = list(set(users)-set(manga_members))
+
+            # Remove all old members
+            print(f"Resetting role: {role.name}; removed: {removed_members}")
+            for member in removed_members:
+                print(f"    {member} removed.")
+                await server.get_member(member).remove_roles(role)
+
+            print(f"Restoring role: {role.name}; added: {new_members}")
             # Re-add all members
-            async for user in users:
-                if user.bot:
+            members_list[role.name] = users
+            for user in new_members:
+                if user == "TCBScanner":
                     continue
-                if role not in user.roles:
-                    print(f"    {user} removed.")
-                    await user.add_roles(role)
+                else:
+                    print(f"    User ID: {user} was added.")
+                    await server.get_member(user).add_roles(role)
+            with open('members_list.json', 'w') as f:
+                json.dump(members_list, f)
 
 # Define an async event that runs when the bot is ready to start processing events
 @client.event
 async def on_ready():
     manga_list = {}
+    members_list = {}
 
     server = client.get_guild(SERVER_ID)
     channel = server.get_channel(CHANNEL_ID)
@@ -145,20 +166,29 @@ async def on_ready():
         with open("manga_list.json", 'r') as f:
             manga_list = json.load(f)
     except:
-        print(f"Manga list not found")
-        exit(1)
+        print(f"Manga list not found, creating new one")
+        with open("manga_list.json", 'w') as f:
+            json.dump({},f)
+            manga_list={}
+
+    # load mangas
+    try:
+        with open("members_list.json", 'r') as f:
+            members_list = json.load(f)
+    except:
+        print(f"Members list not found, creating new one")
+        with open("members_list.json", 'w') as f:
+            json.dump({},f)
+            manga_list = {}
 
     while True:
-        print(f"Begin checking!")
+        print(f"Updating lists!")
         # Check memberships
-        await update(server, channel, manga_list)
+        await update(server, channel, manga_list, members_list)
 
+        print(f"Checking for new mangas..")
         # Start checking for new manga releases
         await check_manga(server, manga_list)
-
-        # Flush updated list
-        with open('manga_list.json', 'w') as f:
-            json.dump(manga_list, f)
 
         # Wait before checking for new releases again
         print(f"Done checking, sleeping for {UPDATE_INTERVAL/60} minutes..")

@@ -1,2 +1,2 @@
-"D:\Project\DiscordTCBScansRSSBot\venv\Scripts\python.exe" MainBot.py
+"D:\Project\MangaBot2\venv\Scriptspython.exe" MainBot.py
 pause
