@@ -198,7 +198,7 @@ async def on_ready():
 
 # load mangas
 try:
-    with open("settings.json", 'r') as f:
+     with open("settings.json", 'r') as f:
         SETTINGS = json.load(f)
 
         CHANNEL_ID = SETTINGS["CHANNEL_ID"]
