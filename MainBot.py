@@ -1,3 +1,5 @@
+import os
+
 import discord
 import feedparser
 import re
@@ -152,47 +154,61 @@ async def update_members(message, role, server, members_list):
             with open('members_list.json', 'w') as f:
                 json.dump(members_list, f)
 
-# Define an async event that runs when the bot is ready to start processing events
 @client.event
-async def on_ready():
-    manga_list = {}
-    members_list = {}
+async def on_voice_state_update(member, before, after):
+    n = member.nick + " (Soaked)"
+    if(after.channel=="Wrong Answer"):
+        member.setNickname(n)
+        #Keep count of sins, save sin state
+    else:
+        # processid = os.fork()
+        # #forking so bot isn't waiting on this single thing
+        # if (processid>0):
+        await asyncio.sleep(10)
+        member.setNickname(member.nick)
 
-    server = client.get_guild(SERVER_ID)
-    channel = server.get_channel(CHANNEL_ID)
 
-    #load mangas
-    try:
-        with open("manga_list.json", 'r') as f:
-            manga_list = json.load(f)
-    except:
-        print(f"Manga list not found, creating new one")
-        with open("manga_list.json", 'w') as f:
-            json.dump({},f)
-            manga_list={}
-
-    # load mangas
-    try:
-        with open("members_list.json", 'r') as f:
-            members_list = json.load(f)
-    except:
-        print(f"Members list not found, creating new one")
-        with open("members_list.json", 'w') as f:
-            json.dump({},f)
-            manga_list = {}
-
-    while True:
-        print(f"Updating lists!")
-        # Check memberships
-        await update(server, channel, manga_list, members_list)
-
-        print(f"Checking for new mangas..")
-        # Start checking for new manga releases
-        await check_manga(server, manga_list)
-
-        # Wait before checking for new releases again
-        print(f"Done checking, sleeping for {UPDATE_INTERVAL/60} minutes..")
-        await asyncio.sleep(UPDATE_INTERVAL)
+# Define an async event that runs when the bot is ready to start processing events
+#@client.event
+# async def on_ready():
+#     manga_list = {}
+#     members_list = {}
+#
+#     server = client.get_guild(SERVER_ID)
+#     channel = server.get_channel(CHANNEL_ID)
+#
+#     #load mangas
+#     try:
+#         with open("manga_list.json", 'r') as f:
+#             manga_list = json.load(f)
+#     except:
+#         print(f"Manga list not found, creating new one")
+#         with open("manga_list.json", 'w') as f:
+#             json.dump({},f)
+#             manga_list={}
+#
+#     # load mangas
+#     try:
+#         with open("members_list.json", 'r') as f:
+#             members_list = json.load(f)
+#     except:
+#         print(f"Members list not found, creating new one")
+#         with open("members_list.json", 'w') as f:
+#             json.dump({},f)
+#             manga_list = {}
+#
+#     while True:
+#         print(f"Updating lists!")
+#         # Check memberships
+#         await update(server, channel, manga_list, members_list)
+#
+#         print(f"Checking for new mangas..")
+#         # Start checking for new manga releases
+#         await check_manga(server, manga_list)
+#
+#         # Wait before checking for new releases again
+#         print(f"Done checking, sleeping for {UPDATE_INTERVAL/60} minutes..")
+#         await asyncio.sleep(UPDATE_INTERVAL)
 
 # Run the bot with the specified token
 
