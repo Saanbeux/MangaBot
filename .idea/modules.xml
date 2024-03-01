@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/DiscordTCBScansRSSBot.iml" filepath="$PROJECT_DIR$/.idea/DiscordTCBScansRSSBot.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/MangaBot.iml" filepath="$PROJECT_DIR$/.idea/MangaBot.iml" />
     </modules>
   </component>
 </project>
