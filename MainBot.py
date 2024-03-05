@@ -175,10 +175,12 @@ async def embedLinks(message):
     links = re.findall(r'(https?://\S+)', message.content)
     try:
         for link in links:
-            if (('twitter.com' in link or 'tiktok.com' in link) and not link.startswith('https://vx')):
+            if (('twitter.com' in link or 'x.com' in link) and not link.startswith('https://vx')):
                 trimmed_link = re.sub(r'https?://(?:www\.)?', '', link)
+                if 'x.com' in trimmed_link:
+                    trimmed_link = trimmed_link.replace('x.com','twitter.com')
                 modified_link = 'https://vx' + trimmed_link
-                await message.channel.send("Adjusted Twitter/Tiktok link: " + modified_link)
+                await message.channel.send("Adjusted Twitter link: " + modified_link)
     except Exception as error:
         print(error)
 @client.event
@@ -205,7 +207,7 @@ async def on_ready():
     server = client.get_guild(SETTINGS["SERVER_ID"])
     channel = server.get_channel(SETTINGS["CHANNEL_ID"])
 
-    #await startMangas()
+    await startMangas()
 
 async def startMangas():
     global manga_list, SETTINGS
