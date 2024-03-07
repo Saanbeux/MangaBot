@@ -142,9 +142,7 @@ async def initiate_manga_list(message, role):
 
 async def wrongAnswerChecker(member, after):
     # check that there's a nickname
-    n = member.name
-    if (member.nick != None):
-        n = member.nick
+    n = member.display_name
 
     #check don't explode because an owner moved
     role = discord.utils.get(server.roles, name="headhoncho")
